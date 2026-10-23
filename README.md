@@ -6,7 +6,7 @@ Windows 本地小工具：**截图识字 + 剪贴板历史**。全程离线，�
 
 **Windows 10 / 11 64 位 · 免安装版**
 
-[**⬇ 下载 截图助手 v1.0.0**](https://github.com/zaonidaba-prog/jietuzhushou/releases/latest)
+[**⬇ 下载 截图助手 v1.0.1**](https://github.com/zaonidaba-prog/jietuzhushou/releases/latest)
 
 下载 zip 后解压，双击里面的 `截图助手.exe`。首次运行如遇 Windows SmartScreen 提示“未知发布者”，点“更多信息 → 仍要运行”。
 
