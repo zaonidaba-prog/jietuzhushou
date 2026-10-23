@@ -204,7 +204,7 @@ class AppController(QObject):
         self._capture_pending = False
         if self._overlay is not None:
             return
-        overlay = CaptureOverlay()
+        overlay = CaptureOverlay(legacy_mode=self.config.legacy_capture)
         overlay.captured.connect(self._on_captured)
         overlay.canceled.connect(self._on_capture_canceled)
         overlay.failed.connect(self._on_capture_failed)
