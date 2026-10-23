@@ -11,6 +11,7 @@ from PySide6.QtGui import (
     QFontMetrics,
     QKeySequence,
     QPainter,
+    QPixmap,
     QShortcut,
 )
 from PySide6.QtWidgets import (
@@ -23,7 +24,9 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMenu,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
+    QSplitter,
     QStackedWidget,
     QStyle,
     QStyledItemDelegate,
@@ -147,14 +150,15 @@ class HistoryWindow(QWidget):
         self.db = db
         self.setWindowTitle("剪贴板历史 - 截图助手")
         self.setWindowIcon(app_icon())
-        self.resize(880, 650)
-        self.setMinimumSize(700, 480)
+        self.resize(1080, 680)
+        self.setMinimumSize(840, 520)
 
         self._offset = 0
         self._total = 0
         self._has_more = False
         self._paused = False
         self._dirty = True
+        self._preview_item_id: int | None = None
 
         root = QVBoxLayout(self)
         root.setContentsMargins(26, 22, 26, 18)
@@ -165,7 +169,7 @@ class HistoryWindow(QWidget):
         title_box.setSpacing(2)
         title = QLabel("剪贴板历史")
         title.setProperty("class", "title")
-        subtitle = QLabel("复制过的文字、图片、文件都在这里 · 仅保存在本机")
+        subtitle = QLabel("复制过的文字、图片、文件都在这里 · 单击查看全文 · 双击复制")
         subtitle.setProperty("class", "subtitle")
         title_box.addWidget(title)
         title_box.addWidget(subtitle)
@@ -217,6 +221,7 @@ class HistoryWindow(QWidget):
         self.list.setMouseTracking(True)
         self.list.setSpacing(0)
         self.list.itemDoubleClicked.connect(self._on_double_click)
+        self.list.currentItemChanged.connect(self._on_current_item_changed)
         self.list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.list.customContextMenuRequested.connect(self._show_context_menu)
         self.list.verticalScrollBar().valueChanged.connect(self._on_scroll)
@@ -241,7 +246,80 @@ class HistoryWindow(QWidget):
         empty_layout.addWidget(empty_hint)
         empty_layout.addStretch(1)
         self.stack.addWidget(empty)
-        root.addWidget(self.stack, 1)
+
+        # Right-hand preview: click any row to read the complete content.
+        self.preview_panel = QFrame()
+        self.preview_panel.setProperty("class", "card")
+        self.preview_panel.setMinimumWidth(320)
+        preview_layout = QVBoxLayout(self.preview_panel)
+        preview_layout.setContentsMargins(16, 14, 16, 14)
+        preview_layout.setSpacing(10)
+
+        preview_header = QHBoxLayout()
+        self.preview_title = QLabel("内容预览")
+        self.preview_title.setProperty("class", "section")
+        preview_header.addWidget(self.preview_title)
+        preview_header.addStretch(1)
+        self.preview_meta = QLabel("")
+        self.preview_meta.setProperty("class", "hint")
+        preview_header.addWidget(self.preview_meta)
+        preview_layout.addLayout(preview_header)
+
+        self.preview_stack = QStackedWidget()
+
+        self.preview_text = QPlainTextEdit()
+        self.preview_text.setReadOnly(True)
+        self.preview_text.setPlaceholderText("选中一条记录查看完整内容")
+        self.preview_text.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
+        self.preview_stack.addWidget(self.preview_text)
+
+        self.preview_image = QLabel("图片预览")
+        self.preview_image.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.preview_image.setMinimumHeight(240)
+        self.preview_image.setStyleSheet(
+            "background: #F8FAFC; border: 1px solid #E2E8F0; "
+            "border-radius: 10px; color: #94A3B8;"
+        )
+        self.preview_stack.addWidget(self.preview_image)
+
+        self.preview_files = QListWidget()
+        self.preview_files.itemDoubleClicked.connect(
+            lambda _item: self._open_preview_location()
+        )
+        self.preview_stack.addWidget(self.preview_files)
+
+        self.preview_empty = QLabel("选中左边任意一条记录，这里会显示完整内容。")
+        self.preview_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.preview_empty.setWordWrap(True)
+        self.preview_empty.setProperty("class", "hint")
+        self.preview_stack.addWidget(self.preview_empty)
+        self.preview_stack.setCurrentWidget(self.preview_empty)
+        preview_layout.addWidget(self.preview_stack, 1)
+
+        preview_buttons = QHBoxLayout()
+        preview_buttons.setSpacing(8)
+        self.preview_copy_btn = QPushButton("复制全文")
+        self.preview_copy_btn.setProperty("class", "primary")
+        self.preview_copy_btn.clicked.connect(self._copy_preview)
+        self.preview_copy_btn.hide()
+        preview_buttons.addWidget(self.preview_copy_btn)
+
+        self.preview_open_btn = QPushButton("打开位置")
+        self.preview_open_btn.setProperty("class", "ghost")
+        self.preview_open_btn.clicked.connect(self._open_preview_location)
+        self.preview_open_btn.hide()
+        preview_buttons.addWidget(self.preview_open_btn)
+        preview_buttons.addStretch(1)
+        preview_layout.addLayout(preview_buttons)
+
+        self.splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.splitter.setChildrenCollapsible(False)
+        self.splitter.addWidget(self.stack)
+        self.splitter.addWidget(self.preview_panel)
+        self.splitter.setSizes([580, 380])
+        self.splitter.setStretchFactor(0, 3)
+        self.splitter.setStretchFactor(1, 2)
+        root.addWidget(self.splitter, 1)
 
         footer = QHBoxLayout()
         self.status = QLabel("")
@@ -309,11 +387,17 @@ class HistoryWindow(QWidget):
         search = self.search.text().strip()
         self._offset = 0
         self._total = self.db.count_items(kind, search)
+        self.list.blockSignals(True)
         self.list.clear()
         self._load_page()
+        self.list.blockSignals(False)
         self._dirty = False
         self.stack.setCurrentIndex(0 if self._total > 0 else 1)
         self._update_status()
+        if self._total > 0:
+            self.list.setCurrentRow(0)
+        else:
+            self._clear_preview()
 
     def _load_page(self) -> None:
         kind = self.filter.currentData() or "all"
@@ -368,9 +452,94 @@ class HistoryWindow(QWidget):
         value = item.data(ROLE_ID)
         return int(value) if value is not None else None
 
+    def _on_current_item_changed(self, current, previous) -> None:
+        if current is None:
+            self._clear_preview()
+            return
+        value = current.data(ROLE_ID)
+        if value is not None:
+            self._show_preview(int(value))
+
+    def _clear_preview(self) -> None:
+        self._preview_item_id = None
+        self.preview_title.setText("内容预览")
+        self.preview_meta.setText("")
+        self.preview_stack.setCurrentWidget(self.preview_empty)
+        self.preview_copy_btn.hide()
+        self.preview_open_btn.hide()
+
+    def _show_preview(self, item_id: int) -> None:
+        item = self.db.get_item(item_id)
+        if item is None:
+            self._clear_preview()
+            return
+        self._preview_item_id = item_id
+        self.preview_meta.setText(format_time(item.created_at))
+        self.preview_copy_btn.show()
+        self.preview_open_btn.hide()
+
+        if item.kind == "text":
+            self.preview_title.setText("文本全文")
+            self.preview_meta.setText(f"{len(item.text)} 字 · {format_time(item.created_at)}")
+            self.preview_text.setPlainText(item.text or "(空文本)")
+            self.preview_stack.setCurrentWidget(self.preview_text)
+            self.preview_copy_btn.setText("复制全文")
+            cursor = self.preview_text.textCursor()
+            cursor.movePosition(cursor.MoveOperation.Start)
+            self.preview_text.setTextCursor(cursor)
+
+        elif item.kind == "image":
+            self.preview_title.setText("图片预览")
+            pixmap = QPixmap(item.image_path)
+            if pixmap.isNull():
+                self.preview_image.setPixmap(QPixmap())
+                self.preview_image.setText("图片文件已不存在")
+                self.preview_meta.setText(format_time(item.created_at))
+            else:
+                scaled = pixmap.scaled(
+                    360,
+                    360,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+                self.preview_image.setPixmap(scaled)
+                self.preview_image.setText("")
+                self.preview_meta.setText(
+                    f"{pixmap.width()}×{pixmap.height()} · {format_time(item.created_at)}"
+                )
+            self.preview_stack.setCurrentWidget(self.preview_image)
+            self.preview_copy_btn.setText("复制图片")
+            self.preview_open_btn.show()
+
+        elif item.kind == "file":
+            self.preview_title.setText("文件列表")
+            self.preview_meta.setText(
+                f"{len(item.file_paths)} 个文件 · {format_time(item.created_at)}"
+            )
+            self.preview_files.clear()
+            for path in item.file_paths:
+                li = QListWidgetItem(path)
+                li.setToolTip(path)
+                self.preview_files.addItem(li)
+            self.preview_stack.setCurrentWidget(self.preview_files)
+            self.preview_copy_btn.setText("复制文件路径")
+            self.preview_open_btn.show()
+
+    def _copy_preview(self) -> None:
+        if self._preview_item_id is None:
+            return
+        self.copy_requested.emit(self._preview_item_id)
+        self.show_toast("已复制到剪贴板")
+
+    def _open_preview_location(self) -> None:
+        if self._preview_item_id is not None:
+            self._open_location(self._preview_item_id)
+
     def _on_double_click(self, item: QListWidgetItem) -> None:
         value = item.data(ROLE_ID)
         if value is not None:
+            self.list.setCurrentItem(item)
+            self._show_preview(int(value))
             self.copy_requested.emit(int(value))
 
     def _copy_selected(self) -> None:
@@ -405,6 +574,7 @@ class HistoryWindow(QWidget):
         kind = item.data(ROLE_KIND)
 
         menu = QMenu(self)
+        act_view = menu.addAction("查看全文")
         act_copy = menu.addAction("复制")
         act_pin = menu.addAction("取消收藏" if pinned else "收藏")
         menu.addSeparator()
@@ -414,7 +584,10 @@ class HistoryWindow(QWidget):
         act_delete = menu.addAction("删除")
 
         chosen = menu.exec(self.list.mapToGlobal(pos))
-        if chosen is act_copy:
+        if chosen is act_view:
+            self.list.setCurrentItem(item)
+            self._show_preview(item_id)
+        elif chosen is act_copy:
             self.copy_requested.emit(item_id)
         elif chosen is act_pin:
             self.pin_requested.emit(item_id, not pinned)
