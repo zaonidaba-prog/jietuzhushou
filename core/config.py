@@ -18,6 +18,7 @@ class Config:
     hotkey_history: str = "Alt+V"
     autostart: bool = True
     clipboard_paused: bool = False
+    legacy_capture: bool = False
     first_run_done: bool = False
 
     @property
