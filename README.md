@@ -1,6 +1,16 @@
-# 截图助手
+# 截图助手（JieTuZhuShou）
 
 Windows 本地小工具：**截图识字 + 剪贴板历史**。全程离线，不联网、不上传。
+
+## 📥 下载（普通用户）
+
+**Windows 10 / 11 64 位 · 免安装版**
+
+[**⬇ 下载 截图助手 v1.0.0**](https://github.com/zaonidaba-prog/jietuzhushou/releases/latest)
+
+下载 zip 后解压，双击里面的 `截图助手.exe`。首次运行如遇 Windows SmartScreen 提示“未知发布者”，点“更多信息 → 仍要运行”。
+
+> 也可以在 [Releases](https://github.com/zaonidaba-prog/jietuzhushou/releases) 页面查看历史版本。
 
 ## 功能
 
@@ -58,3 +68,7 @@ Windows 本地小工具：**截图识字 + 剪贴板历史**。全程离线，�
 - 只能记录程序第一次运行之后的复制内容；程序未运行时不会记录。
 - 剪贴板历史是本机 SQLite 明文存储，复制密码等敏感内容也会记录，可用托盘「暂停记录」或历史窗口删除。
 - exe 未做数字签名，首次运行 Windows 可能提示“未知发布者”，选择“仍要运行”即可。
+
+## License
+
+本项目使用 [MIT License](LICENSE)。任何人都可以免费使用、修改、分发和商用，只需保留版权声明和许可证文本。
