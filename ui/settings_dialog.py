@@ -102,6 +102,12 @@ class SettingsDialog(QDialog):
         self.pause_check = QCheckBox("暂停记录剪贴板（暂停期间仍可查看和复制历史）")
         self.pause_check.setChecked(config.clipboard_paused)
         toggle_layout.addWidget(self.pause_check)
+
+        self.legacy_capture_check = QCheckBox(
+            "使用旧版截图流程（松开鼠标立即保存，不显示 ✓ / ✕）"
+        )
+        self.legacy_capture_check.setChecked(config.legacy_capture)
+        toggle_layout.addWidget(self.legacy_capture_check)
         form.addRow("", toggle_box)
 
         card_layout.addLayout(form)
@@ -204,6 +210,7 @@ class SettingsDialog(QDialog):
             hotkey_history=history,
             autostart=self.autostart_check.isChecked(),
             clipboard_paused=self.pause_check.isChecked(),
+            legacy_capture=self.legacy_capture_check.isChecked(),
         )
         ok, message = self.apply_callback(new_config)
         if not ok:
